@@ -1,13 +1,8 @@
 server:
   port: 8079
   login: pgBalancer
-  pass: 123789
+  pass: 123456
   timeout: 3
-  MaxConns: 20
-  MinConns: 5
-  MaxConnLifetime: 1
-  MaxConnIdleTime: 30
-  HealthCheckPeriod: 1
 databases:
   - url: jdbc:postgresql://localhost:5432/postgres
     login: postgres

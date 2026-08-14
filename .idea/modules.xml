@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/gdbc balancer.iml" filepath="$PROJECT_DIR$/.idea/gdbc balancer.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/jdbcBalancer.iml" filepath="$PROJECT_DIR$/.idea/jdbcBalancer.iml" />
     </modules>
   </component>
 </project>
