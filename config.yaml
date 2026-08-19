@@ -1,18 +1,21 @@
 server:
   port: 8079
-  login: pgBalancer
-  pass: 123456
-  timeout: 3
+  login: "jdbcBalancer"
+  pass: "jdbc123proxy789balancer456pass"
+  database: "jdbcProxy"
+  algorithm: "ip-hash"   # "ip-hash" (сессионная привязка для пулов) или "round-robin"
+  timeout_sec: 5
+
 databases:
-  - url: jdbc:postgresql://localhost:5432/postgres
-    login: postgres
-    pass: 123789
+  - url: "jdbc:postgresql://localhost:5432/postgres"
+    login: "pg1test"
+    pass: "testpg1"
     priority: 1
-  - url: jdbc:postgresql://localhost:5432/pg2
-    login: postgres
-    pass: 123789
+  - url: "jdbc:postgresql://localhost:5432/pg2"
+    login: "pg2test"
+    pass: "testpg2"
+    priority: 1
+  - url: "jdbc:postgresql://localhost:5432/pg3"
+    login: "pg3test"
+    pass: "testpg3"
     priority: 2
-  - url: jdbc:postgresql://localhost:5432/pg3
-    login: postgres
-    pass: 123789
-    priority: 3

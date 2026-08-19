@@ -1,26 +1,107 @@
 package main
 
 import (
-	"log"
+	"context"
+	"flag"
+	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
+
+	"jdbcBalancer/proxy"
 )
 
-func main() {
-	var config Config
-	config.readConfig()
+var (
+	configPath = flag.String("config", "config.yaml", "Path to YAML configuration file")
+	logJSON    = flag.Bool("json-log", false, "Enable structured JSON logging format")
+	logLevel   = flag.String("log-level", "info", "Log level: debug, info, warn, error")
+)
 
-	proxy := NewProxyServer(config)
-	if err := proxy.Start(); err != nil {
-		log.Fatalf("Failed to start proxy: %v", err)
+func initLogger(isJSON bool, levelStr string) {
+	var lvl slog.Level
+	switch levelStr {
+	case "debug":
+		lvl = slog.LevelDebug
+	case "warn":
+		lvl = slog.LevelWarn
+	case "error":
+		lvl = slog.LevelError
+	default:
+		lvl = slog.LevelInfo
 	}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	<-stop
+	opts := &slog.HandlerOptions{
+		Level: lvl,
+	}
 
-	log.Println("Received shutdown signal")
-	proxy.Stop()
+	var handler slog.Handler
+	if isJSON {
+		handler = slog.NewJSONHandler(os.Stdout, opts)
+	} else {
+		handler = slog.NewTextHandler(os.Stdout, opts)
+	}
 
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+}
+
+func main() {
+	flag.Parse()
+
+	// 1. Инициализация структурированного логирования
+	initLogger(*logJSON, *logLevel)
+	slog.Info("Starting jdbcBalancer PostgreSQL Proxy...", "version", "2.0-inprocess")
+
+	// 2. Чтение конфигурации без panic()
+	cfg, err := proxy.LoadConfig(*configPath)
+	if err != nil {
+		slog.Error("Fatal: failed to load configuration", "path", *configPath, "err", err)
+		os.Exit(1)
+	}
+
+	slog.Info("Configuration loaded successfully",
+		"listen_port", cfg.Server.Port,
+		"server_login", cfg.Server.Login,
+		"target_database", cfg.Server.Database,
+		"configured_backends", len(cfg.Databases),
+	)
+
+	// 3. Создание и запуск внутрипроцессного прокси-сервера (без промежуточных портов pgpx)
+	server := proxy.NewProxyServer(cfg)
+	if err := server.Start(); err != nil {
+		slog.Error("Fatal: failed to start proxy server", "port", cfg.Server.Port, "err", err)
+		os.Exit(1)
+	}
+
+	slog.Info("Proxy server running in-process",
+		"address", fmt.Sprintf("0.0.0.0:%d", cfg.Server.Port),
+	)
+
+	// 4. Graceful shutdown на сигналы SIGINT / SIGTERM
+	stopSignal := make(chan os.Signal, 1)
+	signal.Notify(stopSignal, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
+
+	sig := <-stopSignal
+	slog.Info("Received shutdown signal", "signal", sig.String())
+
+	// Даем 15 секунд на graceful завершение активных клиентских сессий
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		server.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		slog.Info("Proxy server gracefully stopped without errors")
+	case <-shutdownCtx.Done():
+		slog.Warn("Graceful shutdown timeout exceeded, forcing exit")
+	}
+
+	slog.Info("jdbcBalancer terminated")
 }
