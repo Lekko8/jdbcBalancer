@@ -17,7 +17,6 @@ var bufferPool = sync.Pool{
 	},
 }
 
-// AuthenticateAndBridge выполняет авторизацию клиента и бэкенда внутри процесса
 func AuthenticateAndBridge(
 	clientConn net.Conn,
 	backendConn net.Conn,
@@ -25,8 +24,7 @@ func AuthenticateAndBridge(
 	db DatabaseConfig,
 	expectedClientPass string,
 ) error {
-	// 1. Отправляем StartupMessage на бэкенд
-	backendStartup := BuildStartupMessage(backendParams, db.Login, db.DBName)
+	backendStartup := buildStartupMessage(backendParams, db.Login, db.DBName)
 	if _, err := backendConn.Write(backendStartup); err != nil {
 		return fmt.Errorf("send startup to backend: %w", err)
 	}
@@ -50,7 +48,9 @@ func AuthenticateAndBridge(
 			}
 
 		case *pgproto3.AuthenticationSASL:
-			if err := handleClientCleartextToBackendSCRAM(clientConn, clientBackend, backendFrontend, db.Login, backendPassword, expectedClientPass); err != nil {
+			if err := handleClientCleartextToBackendSCRAM(clientConn,
+				clientBackend, backendFrontend, db.Login,
+				backendPassword, expectedClientPass); err != nil {
 				return err
 			}
 
@@ -118,7 +118,7 @@ func handleClientCleartextToBackendSCRAM(
 
 func executeBackendSCRAM(backendFrontend *pgproto3.Frontend, backendUser, backendPass string) error {
 	scramClient := NewScramClient(backendUser, backendPass)
-	clientFirst := scramClient.ClientFirstMessage()
+	clientFirst := scramClient.clientFirstMessage()
 
 	backendFrontend.Send(&pgproto3.SASLInitialResponse{
 		AuthMechanism: "SCRAM-SHA-256",
@@ -137,11 +137,11 @@ func executeBackendSCRAM(backendFrontend *pgproto3.Frontend, backendUser, backen
 		return fmt.Errorf("expected SASLContinue, got %T", msg)
 	}
 
-	if err := scramClient.ParseServerFirst(continueResp.Data); err != nil {
+	if err := scramClient.parseServerFirst(continueResp.Data); err != nil {
 		return fmt.Errorf("parse server-first: %w", err)
 	}
 
-	clientFinal, err := scramClient.ClientFinalMessage()
+	clientFinal, err := scramClient.clientFinalMessage()
 	if err != nil {
 		return fmt.Errorf("build client-final: %w", err)
 	}
@@ -160,10 +160,10 @@ func executeBackendSCRAM(backendFrontend *pgproto3.Frontend, backendUser, backen
 		return fmt.Errorf("expected SASLFinal, got %T", msg)
 	}
 
-	return scramClient.VerifyServerFinal(finalResp.Data)
+	return scramClient.verifyServerFinal(finalResp.Data)
 }
 
-func ProxyBidirectional(conn1, conn2 net.Conn) {
+func Bidirectional(conn1, conn2 net.Conn) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 

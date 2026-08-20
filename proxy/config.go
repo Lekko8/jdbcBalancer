@@ -31,10 +31,11 @@ type DatabaseConfig struct {
 	CredsCmd string `mapstructure:"creds_cmd"`
 	Priority int    `mapstructure:"priority"`
 
-	HostPort string `mapstructure:"-"`
+	HostPort string `mapstructure:"-"` // сетевой адрес
 	DBName   string `mapstructure:"-"`
 }
 
+// LoadConfig читает конфиг файл и заполняет Config
 func LoadConfig(path string) (*Config, error) {
 	v := viper.New()
 	if path != "" {

@@ -43,7 +43,7 @@ func generateSecureNonce() string {
 	return base64.RawStdEncoding.EncodeToString(b)
 }
 
-func (sc *ScramClient) ClientFirstMessage() string {
+func (sc *ScramClient) clientFirstMessage() string {
 	if sc.state != "start" {
 		return ""
 	}
@@ -51,7 +51,7 @@ func (sc *ScramClient) ClientFirstMessage() string {
 	return fmt.Sprintf("n,,n=%s,r=%s", sc.username, sc.clientNonce)
 }
 
-func (sc *ScramClient) ParseServerFirst(data []byte) error {
+func (sc *ScramClient) parseServerFirst(data []byte) error {
 	if sc.state != "first_sent" {
 		return fmt.Errorf("invalid state: expected first_sent, got %s", sc.state)
 	}
@@ -98,7 +98,7 @@ func (sc *ScramClient) ParseServerFirst(data []byte) error {
 	return nil
 }
 
-func (sc *ScramClient) ClientFinalMessage() (string, error) {
+func (sc *ScramClient) clientFinalMessage() (string, error) {
 	if sc.state != "server_parsed" {
 		return "", fmt.Errorf("invalid state: expected server_parsed, got %s", sc.state)
 	}
@@ -123,7 +123,7 @@ func (sc *ScramClient) ClientFinalMessage() (string, error) {
 	return clientFinalWithoutProof + ",p=" + proof, nil
 }
 
-func (sc *ScramClient) VerifyServerFinal(data []byte) error {
+func (sc *ScramClient) verifyServerFinal(data []byte) error {
 	if sc.state != "final_sent" {
 		return fmt.Errorf("invalid state: expected final_sent, got %s", sc.state)
 	}

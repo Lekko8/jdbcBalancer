@@ -52,6 +52,7 @@ func ReadStartupPacket(conn net.Conn) ([]byte, map[string]string, error) {
 	}
 }
 
+// parseStartupParams ну, парсит параметры
 func parseStartupParams(data []byte) map[string]string {
 	params := make(map[string]string)
 	pos := 0
@@ -83,8 +84,8 @@ func parseStartupParams(data []byte) map[string]string {
 	return params
 }
 
-// BuildStartupMessage формирует пакет с подменой пользователя и базы
-func BuildStartupMessage(params map[string]string, backendUser, backendDB string) []byte {
+// buildStartupMessage формирует пакет с подменой пользователя и базы
+func buildStartupMessage(params map[string]string, backendUser, backendDB string) []byte {
 	buf := make([]byte, 0, 256)
 	buf = binary.BigEndian.AppendUint32(buf, ProtocolVersion30)
 

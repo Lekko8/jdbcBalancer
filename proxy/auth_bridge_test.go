@@ -1,10 +1,8 @@
-package proxy_test
+package proxy
 
 import (
 	"net"
 	"testing"
-
-	"jdbcBalancer/proxy"
 
 	"github.com/jackc/pgx/v5/pgproto3"
 )
@@ -15,7 +13,7 @@ func TestAuthBridge_InvalidClientPassword(t *testing.T) {
 	defer clientConn.Close()
 	defer backendConn.Close()
 
-	dbCfg := proxy.DatabaseConfig{
+	dbCfg := DatabaseConfig{
 		Login:    "backendUser",
 		Pass:     "backendPass",
 		DBName:   "backendDB",
@@ -57,10 +55,45 @@ func TestAuthBridge_InvalidClientPassword(t *testing.T) {
 		}
 	}()
 
-	err := proxy.AuthenticateAndBridge(proxyClient, proxyBackend, map[string]string{}, dbCfg, "CORRECT_CLIENT_PASS")
+	err := AuthenticateAndBridge(proxyClient, proxyBackend, map[string]string{}, dbCfg, "CORRECT_CLIENT_PASS")
 	if err == nil {
 		t.Fatal("expected error on invalid client password, got nil")
 	}
 
 	<-done
+}
+
+func TestAuthBridge_BackendErrorResponse(t *testing.T) {
+	clientConn, proxyClient := net.Pipe()
+	proxyBackend, backendConn := net.Pipe()
+	defer clientConn.Close()
+	defer backendConn.Close()
+
+	dbCfg := DatabaseConfig{
+		Login:    "backendUser",
+		Pass:     "backendPass",
+		DBName:   "backendDB",
+		HostPort: "127.0.0.1:5432",
+	}
+
+	go func() {
+		mockServer := pgproto3.NewBackend(backendConn, backendConn)
+		_, _ = mockServer.Receive()
+		mockServer.Send(&pgproto3.ErrorResponse{
+			Severity: "FATAL",
+			Code:     "28000",
+			Message:  "database system is shutting down",
+		})
+		_ = mockServer.Flush()
+	}()
+
+	go func() {
+		mockClient := pgproto3.NewFrontend(clientConn, clientConn)
+		_, _ = mockClient.Receive()
+	}()
+
+	err := AuthenticateAndBridge(proxyClient, proxyBackend, map[string]string{}, dbCfg, "pass")
+	if err == nil {
+		t.Fatal("expected error on backend error response, got nil")
+	}
 }

@@ -55,8 +55,8 @@ func (r *Router) Stop() {
 	close(r.stopCh)
 }
 
-// SelectDatabase выбирает ноду с учетом приоритета, статуса здоровья и IP клиента
-func (r *Router) SelectDatabase(clientAddr string) (*DatabaseConfig, error) {
+// selectDatabase выбирает ноду с учётом приоритета, статуса здоровья и IP клиента
+func (r *Router) selectDatabase(clientAddr string) (*DatabaseConfig, error) {
 	groups := make(map[int][]*DBStatus)
 	for _, st := range r.dbStatuses {
 		groups[st.Config.Priority] = append(groups[st.Config.Priority], st)
@@ -84,7 +84,7 @@ func (r *Router) SelectDatabase(clientAddr string) (*DatabaseConfig, error) {
 			continue // Все ноды этого приоритета недоступны, переходим к следующему приоритету (Failover)
 		}
 
-		// IP-Hash: гарантирует, что один клиент (DBeaver, пул HikariCP) всегда работает с одной нодой
+		// IP-Hash: гарантирует, что один клиент (DBeaver, пул HikariCP) всегда работает внутри одной ноды
 		if r.algorithm == "ip-hash" && clientAddr != "" {
 			clientIP := extractIP(clientAddr)
 			idx := hashIP(clientIP, len(healthy))
@@ -104,6 +104,7 @@ func (r *Router) SelectDatabase(clientAddr string) (*DatabaseConfig, error) {
 	return nil, fmt.Errorf("no healthy databases available")
 }
 
+// healthCheckerLoop запускает проверки бд
 func (r *Router) healthCheckerLoop() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -126,6 +127,7 @@ func (r *Router) healthCheckerLoop() {
 	}
 }
 
+// checkDBHealth проверяет бд тестовым коннектом
 func (r *Router) checkDBHealth(s *DBStatus) {
 	conn, err := net.DialTimeout("tcp", s.Config.HostPort, 2*time.Second)
 	if err != nil {
@@ -136,7 +138,7 @@ func (r *Router) checkDBHealth(s *DBStatus) {
 
 	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
 
-	startup := BuildStartupMessage(nil, s.Config.Login, s.Config.DBName)
+	startup := buildStartupMessage(nil, s.Config.Login, s.Config.DBName)
 	if _, err := conn.Write(startup); err != nil {
 		r.updateStatus(s, false, err)
 		return
@@ -164,6 +166,7 @@ func (r *Router) checkDBHealth(s *DBStatus) {
 	}
 }
 
+// updateStatus обновляет статус бд
 func (r *Router) updateStatus(s *DBStatus, healthy bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -180,6 +183,7 @@ func (r *Router) updateStatus(s *DBStatus, healthy bool, err error) {
 	s.LastCheck = time.Now()
 }
 
+// extractHostPort парсит сетевой адрес целевой бд
 func extractHostPort(url string) string {
 	d := url
 	for _, prefix := range []string{"jdbc:postgresql://", "postgres://", "postgresql://"} {
@@ -200,6 +204,7 @@ func extractHostPort(url string) string {
 	return d
 }
 
+// extractDBName получает имя бд
 func extractDBName(url string) string {
 	d := url
 	for _, prefix := range []string{"jdbc:postgresql://", "postgres://", "postgresql://"} {

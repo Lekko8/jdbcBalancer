@@ -1,10 +1,8 @@
-package proxy_test
+package proxy
 
 import (
 	"os"
 	"testing"
-
-	"jdbcBalancer/proxy"
 )
 
 func TestConfig_LoadValidYAML(t *testing.T) {
@@ -36,7 +34,7 @@ databases:
 	}
 	_ = tmpFile.Close()
 
-	cfg, err := proxy.LoadConfig(tmpFile.Name())
+	cfg, err := LoadConfig(tmpFile.Name())
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
 	}
@@ -76,7 +74,7 @@ databases: []
 	_, _ = tmpFile.Write([]byte(yamlContent))
 	_ = tmpFile.Close()
 
-	_, err = proxy.LoadConfig(tmpFile.Name())
+	_, err = LoadConfig(tmpFile.Name())
 	if err == nil {
 		t.Fatal("expected error on empty databases list, got nil")
 	}

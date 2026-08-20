@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgproto3"
 )
 
-type ProxyServer struct {
+type Server struct {
 	cfg      *Config
 	router   *Router
 	listener net.Listener
@@ -20,9 +20,9 @@ type ProxyServer struct {
 	cancel   context.CancelFunc
 }
 
-func NewProxyServer(cfg *Config) *ProxyServer {
+func NewProxyServer(cfg *Config) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &ProxyServer{
+	return &Server{
 		cfg:    cfg,
 		router: NewRouter(cfg.Databases, cfg.Server.Algorithm),
 		ctx:    ctx,
@@ -30,7 +30,7 @@ func NewProxyServer(cfg *Config) *ProxyServer {
 	}
 }
 
-func (p *ProxyServer) Start() error {
+func (p *Server) Start() error {
 	addr := fmt.Sprintf(":%d", p.cfg.Server.Port)
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -46,7 +46,7 @@ func (p *ProxyServer) Start() error {
 	return nil
 }
 
-func (p *ProxyServer) Stop() {
+func (p *Server) Stop() {
 	p.cancel()
 	if p.listener != nil {
 		p.listener.Close()
@@ -56,7 +56,7 @@ func (p *ProxyServer) Stop() {
 	slog.Info("Proxy server gracefully stopped")
 }
 
-func (p *ProxyServer) acceptLoop() {
+func (p *Server) acceptLoop() {
 	defer p.wg.Done()
 	for {
 		conn, err := p.listener.Accept()
@@ -79,7 +79,7 @@ func (p *ProxyServer) acceptLoop() {
 	}
 }
 
-func (p *ProxyServer) handleConnection(clientConn net.Conn) {
+func (p *Server) handleConnection(clientConn net.Conn) {
 	if tcpConn, ok := clientConn.(*net.TCPConn); ok {
 		_ = tcpConn.SetNoDelay(true)
 		_ = tcpConn.SetKeepAlive(true)
@@ -88,14 +88,14 @@ func (p *ProxyServer) handleConnection(clientConn net.Conn) {
 
 	clientAddr := clientConn.RemoteAddr().String()
 
-	// 1. Читаем Startup-пакет
+	// Чтение Startup-пакета
 	_, clientParams, err := ReadStartupPacket(clientConn)
 	if err != nil {
 		slog.Warn("Failed to read startup packet", "client", clientAddr, "err", err)
 		return
 	}
 
-	// 2. Валидация логина и имени базы
+	// Валидация логина и имени базы
 	if clientParams["user"] != p.cfg.Server.Login {
 		slog.Warn("Auth failed: invalid user", "client", clientAddr, "user", clientParams["user"])
 		sendFatalError(clientConn, "28000", fmt.Sprintf("role \"%s\" does not exist", clientParams["user"]))
@@ -108,15 +108,15 @@ func (p *ProxyServer) handleConnection(clientConn net.Conn) {
 		return
 	}
 
-	// 3. Выбор целевой БД через роутер с поддержкой IP-Hash / Sticky Sessions
-	targetDB, err := p.router.SelectDatabase(clientAddr)
+	// Выбор целевой БД через роутер
+	targetDB, err := p.router.selectDatabase(clientAddr)
 	if err != nil {
 		slog.Error("No healthy backend available", "client", clientAddr, "err", err)
 		sendFatalError(clientConn, "57P03", "cannot connect to upstream database: all backends unhealthy")
 		return
 	}
 
-	// 4. Прямое подключение к бэкенду
+	// Прямое подключение к бэкенду
 	backendConn, err := net.DialTimeout("tcp", targetDB.HostPort, p.cfg.Server.Timeout)
 	if err != nil {
 		slog.Error("Failed to dial backend", "backend", targetDB.HostPort, "err", err)
@@ -129,15 +129,15 @@ func (p *ProxyServer) handleConnection(clientConn net.Conn) {
 		_ = tcpConn.SetNoDelay(true)
 	}
 
-	// 5. Внутрипроцессная аутентификация
+	// Аутентификация
 	err = AuthenticateAndBridge(clientConn, backendConn, clientParams, *targetDB, p.cfg.Server.Pass)
 	if err != nil {
 		slog.Error("Authentication bridging failed", "client", clientAddr, "backend", targetDB.HostPort, "err", err)
 		return
 	}
 
-	// 6. Прозрачный стриминг данных
-	ProxyBidirectional(clientConn, backendConn)
+	// Прозрачный стриминг данных
+	Bidirectional(clientConn, backendConn)
 }
 
 func sendFatalError(conn net.Conn, code, msg string) {

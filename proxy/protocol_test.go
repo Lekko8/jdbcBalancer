@@ -1,11 +1,9 @@
-package proxy_test
+package proxy
 
 import (
 	"encoding/binary"
 	"net"
 	"testing"
-
-	"jdbcBalancer/proxy"
 )
 
 func TestProtocol_SSLAndGSSRejection(t *testing.T) {
@@ -17,7 +15,7 @@ func TestProtocol_SSLAndGSSRejection(t *testing.T) {
 		// 1. Клиент шлет GSSENCRequest (код 80877104)
 		gssReq := make([]byte, 8)
 		binary.BigEndian.PutUint32(gssReq[:4], 8)
-		binary.BigEndian.PutUint32(gssReq[4:], proxy.GSSENCRequestCode)
+		binary.BigEndian.PutUint32(gssReq[4:], GSSENCRequestCode)
 		_, _ = clientConn.Write(gssReq)
 
 		respGSS := make([]byte, 1)
@@ -29,7 +27,7 @@ func TestProtocol_SSLAndGSSRejection(t *testing.T) {
 		// 2. Клиент шлет SSLRequest (код 80877103)
 		sslReq := make([]byte, 8)
 		binary.BigEndian.PutUint32(sslReq[:4], 8)
-		binary.BigEndian.PutUint32(sslReq[4:], proxy.SSLRequestCode)
+		binary.BigEndian.PutUint32(sslReq[4:], SSLRequestCode)
 		_, _ = clientConn.Write(sslReq)
 
 		respSSL := make([]byte, 1)
@@ -39,13 +37,13 @@ func TestProtocol_SSLAndGSSRejection(t *testing.T) {
 		}
 
 		// 3. Клиент шлет обычный StartupMessage v3.0
-		startup := proxy.BuildStartupMessage(map[string]string{
+		startup := buildStartupMessage(map[string]string{
 			"application_name": "GoTestApp",
 		}, "clientUser", "clientDB")
 		_, _ = clientConn.Write(startup)
 	}()
 
-	_, params, err := proxy.ReadStartupPacket(serverConn)
+	_, params, err := ReadStartupPacket(serverConn)
 	if err != nil {
 		t.Fatalf("ReadStartupPacket failed: %v", err)
 	}
@@ -68,7 +66,7 @@ func TestProtocol_BuildStartupMessage(t *testing.T) {
 		"application_name": "balancer",
 	}
 
-	packet := proxy.BuildStartupMessage(initialParams, "newBackendUser", "newBackendDB")
+	packet := buildStartupMessage(initialParams, "newBackendUser", "newBackendDB")
 	if len(packet) < 8 {
 		t.Fatalf("packet too short: %d", len(packet))
 	}
@@ -79,7 +77,7 @@ func TestProtocol_BuildStartupMessage(t *testing.T) {
 	}
 
 	code := binary.BigEndian.Uint32(packet[4:8])
-	if code != proxy.ProtocolVersion30 {
+	if code != ProtocolVersion30 {
 		t.Fatalf("expected protocol v3.0 (196608), got %d", code)
 	}
 }
