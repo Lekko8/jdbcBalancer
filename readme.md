@@ -1,4 +1,6 @@
-# jdbcBalancer — High-Performance PostgreSQL Proxy & Load Balancer
+# jdbcBalancer
+
+## High-Performance PostgreSQL Proxy & Load Balancer
 
 Легковесный, высокопроизводительный прокси-сервер и балансировщик нагрузки
 для **PostgreSQL**. Разработан для прозрачной аутентификации legacy/JDBC
@@ -75,24 +77,40 @@ databases:
   priority: 2
 ```
 
+---
+
 ## Сборка и запуск
 
 Требуется **Go 1.21+**
 
 ```bash
-# 1. Сборка бинарного файла
+# Сборка бинарного файла
 go build -o jdbcBalancer main.go
 
-# 2. Запуск в текстовом режиме логирования
+# Запуск в текстовом режиме логирования
 ./jdbcBalancer -config=config.yaml -log-level=info
 
-# 3. Запуск в режиме структурированного JSON-логирования (для Kubernetes / Docker)
+# Запуск в режиме структурированного JSON-логирования (для Kubernetes / Docker)
 ./jdbcBalancer -config=config.yaml -json-log=true -log-level=info
+```
+
+Тесты
+
+```bash
+# Тест с проверкой на гонку данных
+go test -v -race ./proxy/...
+
+# Тест с покрытием
+go test -coverprofile coverage.out ./proxy/...
+
+# Вывод подробного покрытия кода
+go tool cover -func coverage.out
+go tool cover -html coverage.out -o coverage.html
 ```
 
 ---
 
-## Как программа работает внутри (Архитектура)
+## Как программа работает внутри
 
 ### Схема обработки соединения
 
@@ -130,18 +148,16 @@ go build -o jdbcBalancer main.go
         (Priority 1 - Active)       (Priority 2 - Failover)
 ```
 
----
+### Детали реализации компонентов:
 
-## Детали реализации компонентов:
-
-### protocol.go (Сетевой парсер):
+#### `protocol.go` Сетевой парсер:
 
 * При первом подключении драйверы PostgreSQL отправляют служебные пакеты
 согласования шифрования (SSL или GSSAPI). Прокси перехватывает их, корректно
 отвечает байтом 'N' (отказ от SSL) и переходит к чтению основного пакета
 StartupMessage с параметрами сессии.
 
-### router.go (Маршрутизатор и Health Check):
+#### `router.go` Маршрутизатор и Health Check:
 
 * Каждые 10 секунд в фоне выполняет легкий handshake к каждой БД.
 Если нода не отвечает за 2 секунды — помечает ее как Unhealthy.
@@ -149,7 +165,7 @@ StartupMessage с параметрами сессии.
 `net.SplitHostPort`, вычисляет хеш `fnv.New32a()` от IP-адреса и детерминированно
 направляет запрос на одну из живых нод.
 
-### auth_bridge.go & scram.go (Мост авторизации):
+#### `auth_bridge.go` & `scram.go` Мост авторизации:
 
 * Клиенту отправляется AuthenticationCleartextPassword.
 * Прокси проверяет пароль клиента. Если он неверен — отправляет стандартный
@@ -158,7 +174,7 @@ ErrorResponse (код 28P01) и закрывает сокет.
 (ClientFirstMessage → ServerFirstMessage → ClientFinalMessage → ServerFinalMessage
 → AuthenticationOk).
 
-### server.go (Транспортный уровень):
+#### `server.go` Транспортный уровень:
 
 * После успешной авторизации соединение переводится в режим сквозного
 двунаправленного копирования (`io.CopyBuffer`) с использованием пула

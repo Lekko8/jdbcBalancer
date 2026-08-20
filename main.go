@@ -105,8 +105,3 @@ func main() {
 
 	slog.Info("jdbcBalancer terminated")
 }
-
-// go test -v -race ./proxy/...
-// go test -coverprofile coverage.out ./proxy/...
-// go tool cover -func coverage.out
-// go tool cover -html coverage.out -o coverage.html
